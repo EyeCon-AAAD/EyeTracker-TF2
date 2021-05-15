@@ -1,0 +1,20 @@
+# Default ignored files
+/shelf/
+/workspace.xml
+# Datasource local storage ignored files
+/../../../../../../../../../../:\Users\PC\Desktop\01_DavidTimbwa\03_ComputerScienceProjects\05_EyeCon\GazeCaptureDataset\eye_tracker_train_and_val\.idea/dataSources/
+/dataSources.local.xml
+# Editor-based HTTP Client requests
+/httpRequests/
+
+
+/train_eye_left.npy
+/train_eye_right.npy
+/train_face.npy
+/train_face_mask.npy
+/train_y.npy
+/val_eye_left.npy
+/val_eye_right.npy
+/val_face.npy
+/val_face_mask.npy
+/val_y.npy
