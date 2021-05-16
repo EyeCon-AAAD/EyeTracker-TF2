@@ -74,7 +74,8 @@ def train(model, train_data, val_data, learning_rate=1e-3, epochs=1000):
 
     history = model.fit([eye_left_train, eye_right_train, face_train, face_mask_train], [y_train],
                         epochs=epochs,
-                        validation_data=([eye_left_val, eye_right_val, face_val, face_mask_val], [y_val]))
+                        validation_data=([eye_left_val, eye_right_val, face_val, face_mask_val], [y_val])
+                        callbacks=[checkpoint_cb, early_stopping_cb])
 
     return history
 
