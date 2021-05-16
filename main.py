@@ -41,7 +41,7 @@ def prepare_data(data):
     return [eye_left, eye_right, face, face_mask, y]
 
 
-def train(model, train_data, val_data, learning_rate=1e-3, epochs=1000):
+def train(model, train_data, val_data, batch_size=128, learning_rate=1e-3, epochs=1000):
     """
     Loss: mse-> Mean Squared Error
     :param model:
@@ -74,7 +74,8 @@ def train(model, train_data, val_data, learning_rate=1e-3, epochs=1000):
 
     history = model.fit([eye_left_train, eye_right_train, face_train, face_mask_train], [y_train],
                         epochs=epochs,
-                        validation_data=([eye_left_val, eye_right_val, face_val, face_mask_val], [y_val])
+                        batch_size=batch_size,
+                        validation_data=([eye_left_val, eye_right_val, face_val, face_mask_val], [y_val]),
                         callbacks=[checkpoint_cb, early_stopping_cb])
 
     return history
@@ -252,7 +253,7 @@ def main():
     val_data = prepare_data(val_data)
 
     # compile & train the model
-    history = train(gaze_prediction_model, train_data, val_data, learning_rate=1e-5, epochs=1000)
+    history = train(gaze_prediction_model, train_data, val_data, batch_size=128, learning_rate=1e-5, epochs=1000)
 
     # plot history
     plot_training_metrics(history)
