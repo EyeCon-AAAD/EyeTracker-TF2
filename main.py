@@ -1,5 +1,6 @@
 import data
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
@@ -22,16 +23,60 @@ def get_train_val_data():
            [val_eye_left, val_eye_right, val_face, val_face_mask, val_y]
 
 
-def normalize():
-    pass
+def normalize(data):
+    shape = data.shape
+    normalised_data = np.reshape(data, (shape[0], -1))
+    normalised_data = normalised_data.astype('float32') / 255.  # scaling
+    normalised_data = normalised_data - np.mean(normalised_data, axis=0)  # normalizing
+    return np.reshape(normalised_data, shape)
 
 
-def prepare_data():
-    pass
+def prepare_data(data):
+    eye_left, eye_right, face, face_mask, y = data
+    eye_left = normalize(eye_left)
+    eye_right = normalize(eye_right)
+    face = normalize(face)
+    face_mask = np.reshape(face_mask, (face_mask.shape[0], -1)).astype('float32')
+    y = y.astype('float32')
+    return [eye_left, eye_right, face, face_mask, y]
 
 
-def train(data):
-    pass
+def train(model, train_data, val_data, learning_rate=1e-3, epochs=1000):
+    """
+    Loss: mse-> Mean Squared Error
+    :param model:
+    :param train_data:
+    :param val_data:
+    :param learning_rate:
+    :return:
+    """
+    eye_left_train = train_data[0]
+    eye_right_train = train_data[1]
+    face_train = train_data[2]
+    face_mask_train = train_data[3]
+
+    eye_left_val = val_data[0]
+    eye_right_val = val_data[1]
+    face_val = val_data[2]
+    face_mask_val = val_data[3]
+
+    y_train = train_data[4]
+    y_val = val_data[4]
+
+    model.compile(loss='mse',
+                  optimizer=tf.keras.optimizers.Adam(lr=learning_rate))
+
+    # save the model with best performance on the validation set
+    checkpoint_cb = tf.keras.callbacks.ModelCheckpoint('gaze_prediction_model.h5', save_best_only=True)
+
+    # perform early stopping when there's no increase in performance on the validation set
+    early_stopping_cb = tf.keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True)
+
+    history = model.fit([eye_left_train, eye_right_train, face_train, face_mask_train], [y_train],
+                        epochs=epochs,
+                        validation_data=([eye_left_val, eye_right_val, face_val, face_mask_val], [y_val]))
+
+    return history
 
 
 def plot_training_metrics(history):
@@ -195,11 +240,22 @@ def main():
     # load data
     train_data, val_data = get_train_val_data()
     gaze_prediction_model = create_model(train_data)
-    print(gaze_prediction_model.summary())
 
     # plot the model to confirm structure
+    print(gaze_prediction_model.summary())
     tf.keras.utils.plot_model(gaze_prediction_model, 'Gaze-Prediction_Model.png', show_shapes=True,
                               show_layer_names=True)
+
+    # normalized images
+    train_data = prepare_data(train_data)
+    val_data = prepare_data(val_data)
+
+    # compile & train the model
+    history = train(gaze_prediction_model, train_data, val_data, learning_rate=1e-5, epochs=1000)
+
+    # plot history
+    plot_training_metrics(history)
+
 
 
 if __name__ == '__main__':
