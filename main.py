@@ -1,3 +1,4 @@
+import os
 import data
 import pandas as pd
 import numpy as np
@@ -32,9 +33,15 @@ def normalize(data):
 
 
 def subsample_data(data, num_samples):
-    if num_samples == data.shape[0]:
+    if num_samples is None:
         return data
     return data[:num_samples]
+
+
+def exponential_decay(init_learning_rate, num_steps):
+    def exponential_decay_fn(epoch):
+        return init_learning_rate * 0.1 ** (epoch / num_steps)
+    return exponential_decay_fn
 
 
 def prepare_data(data, num_samples):
@@ -49,9 +56,18 @@ def prepare_data(data, num_samples):
     return [eye_left, eye_right, face, face_mask, y]
 
 
+def get_run_logdir():
+    root_log_dir = os.path.join(os.curdir, "eyecon_logs")
+    import time
+    run_id = time.strftime("run_%d_%m_%Y-%H_%M_%S")
+    return os.path.join(root_log_dir, run_id)
+
+
 def train(model, train_data, val_data, batch_size=128, learning_rate=1e-3, epochs=1000):
     """
     Loss: mse-> Mean Squared Error
+    :param epochs:
+    :param batch_size:
     :param model:
     :param train_data:
     :param val_data:
@@ -74,17 +90,25 @@ def train(model, train_data, val_data, batch_size=128, learning_rate=1e-3, epoch
     model.compile(loss='mse',
                   optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate))
 
-    # save the model with best performance on the validation set
-    checkpoint_cb = tf.keras.callbacks.ModelCheckpoint('gaze_prediction_model.h5', save_best_only=True)
+    exponential_decay_fn = exponential_decay(learning_rate, num_steps=100)
+    run_logdir = get_run_logdir()
 
-    # perform early stopping when there's no increase in performance on the validation set
-    early_stopping_cb = tf.keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True)
+    callbacks = [
+        # save the model with best performance on the validation set
+        tf.keras.callbacks.ModelCheckpoint('gaze_prediction_model.h5', save_best_only=True),
+        # perform early stopping when there's no increase in performance on the validation set
+        tf.keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True),
+        # learning rate scheduler
+        tf.keras.callbacks.LearningRateScheduler(exponential_decay_fn),
+        # tensorboard callback
+        tf.keras.callbacks.TensorBoard(run_logdir)
+    ]
 
     history = model.fit([eye_left_train, eye_right_train, face_train, face_mask_train], [y_train],
                         epochs=epochs,
                         batch_size=batch_size,
                         validation_data=([eye_left_val, eye_right_val, face_val, face_mask_val], [y_val]),
-                        callbacks=[checkpoint_cb, early_stopping_cb],
+                        callbacks=callbacks,
                         verbose=True)
 
     return history
@@ -255,7 +279,7 @@ def main():
     # normalized images
     print('Preparing Data...')
     # number of samples, added subsampling to try running or debug
-    num_samples = 20
+    num_samples = None
     train_data = prepare_data(train_data, num_samples=num_samples)
     val_data = prepare_data(val_data, num_samples=num_samples)
 
@@ -269,7 +293,7 @@ def main():
     #                         show_layer_names=True)
 
     # compile & train the model
-    history = train(gaze_prediction_model, train_data, val_data, batch_size=5, learning_rate=1e-3, epochs=10)
+    history = train(gaze_prediction_model, train_data, val_data, batch_size=64, learning_rate=1e-3, epochs=1000)
 
     # plot history
     plot_training_metrics(history)
