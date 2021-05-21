@@ -1,8 +1,11 @@
+import os
 import data
+import datetime
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
+import tensorflow_cloud as tfc
 
 
 def get_train_val_data():
@@ -32,7 +35,7 @@ def normalize(data):
 
 
 def subsample_data(data, num_samples):
-    if num_samples == data.shape[0]:
+    if num_samples is None:
         return data
     return data[:num_samples]
 
@@ -49,9 +52,17 @@ def prepare_data(data, num_samples):
     return [eye_left, eye_right, face, face_mask, y]
 
 
+def exponential_decay(init_learning_rate, num_steps):
+    def exponential_decay_fn(epoch):
+        return init_learning_rate * 0.1 ** (epoch / num_steps)
+    return exponential_decay_fn
+
+
 def train(model, train_data, val_data, batch_size=128, learning_rate=1e-3, epochs=1000):
     """
     Loss: mse-> Mean Squared Error
+    :param epochs:
+    :param batch_size:
     :param model:
     :param train_data:
     :param val_data:
@@ -71,21 +82,62 @@ def train(model, train_data, val_data, batch_size=128, learning_rate=1e-3, epoch
     y_train = train_data[4]
     y_val = val_data[4]
 
+    # TFC Config
+    gcp_bucket = "eyecon_bucket_1"
+    model_path = "gaze_prediction_model"
+
+    if tfc.remote():
+        tfc.run(
+            requirements_txt="requirements.txt",
+            distribution_strategy="auto",
+            chief_config=tfc.MachineConfig(
+                cpu_cores=8,
+                memory=30,
+                accelerator_type=tfc.AcceleratorType.NVIDIA_TESLA_T4,
+                accelerator_count=2
+            ),
+            docker_image_bucket_name=gcp_bucket
+        )
+
+    checkpoint_path = os.path.join("gs://", gcp_bucket, model_path, "save_at_{epoch}")
+
+    tensorboard_path = os.path.join("gs://", gcp_bucket, "logs", datetime.datetime.now().strftime("%d%m%Y-%H%M%S"))
+
     model.compile(loss='mse',
                   optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate))
 
-    # save the model with best performance on the validation set
-    checkpoint_cb = tf.keras.callbacks.ModelCheckpoint('gaze_prediction_model.h5', save_best_only=True)
+    exponential_decay_fn = exponential_decay(learning_rate, num_steps=20)
 
-    # perform early stopping when there's no increase in performance on the validation set
-    early_stopping_cb = tf.keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True)
+    callbacks = [
+        # TensorBoard will store logs for each epoch and graph performance for us.
+        tf.keras.callbacks.TensorBoard(log_dir=tensorboard_path, histogram_freq=1),
+        # save the model with best performance on the validation set
+        tf.keras.callbacks.ModelCheckpoint(checkpoint_path, save_best_only=True),
+        # perform early stopping when there's no increase in performance on the validation set
+        tf.keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True),
+        # learning rate scheduler
+        tf.keras.callbacks.LearningRateScheduler(exponential_decay_fn)
+    ]
+
+    if tfc.remote():
+        epochs = 10
+        callbacks = callbacks
+        batch_size = 5
+    else:
+        epochs = 5
+        callbacks = None
+        batch_size = 32
 
     history = model.fit([eye_left_train, eye_right_train, face_train, face_mask_train], [y_train],
                         epochs=epochs,
                         batch_size=batch_size,
                         validation_data=([eye_left_val, eye_right_val, face_val, face_mask_val], [y_val]),
-                        callbacks=[checkpoint_cb, early_stopping_cb],
+                        callbacks=callbacks,
                         verbose=True)
+
+    if tfc.remote():
+        save_path = os.path.join("gs://", gcp_bucket, model_path)
+        model.save(save_path)
 
     return history
 
@@ -254,7 +306,7 @@ def main():
 
     # normalized images
     print('Preparing Data...')
-    # number of samples, added subsampling to try running or debug
+    # number of samples, added subsampling to try running or debug. None for all samples
     num_samples = 20
     train_data = prepare_data(train_data, num_samples=num_samples)
     val_data = prepare_data(val_data, num_samples=num_samples)
