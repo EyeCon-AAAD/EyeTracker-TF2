@@ -31,12 +31,20 @@ def normalize(data):
     return np.reshape(normalised_data, shape)
 
 
-def prepare_data(data):
+def subsample_data(data, num_samples):
+    if num_samples == data.shape[0]:
+        return data
+    return data[:num_samples]
+
+
+def prepare_data(data, num_samples):
     eye_left, eye_right, face, face_mask, y = data
-    eye_left = normalize(eye_left)
-    eye_right = normalize(eye_right)
-    face = normalize(face)
+    eye_left = normalize(subsample_data(eye_left, num_samples))
+    eye_right = normalize(subsample_data(eye_right, num_samples))
+    face = normalize(subsample_data(face, num_samples))
+    face_mask = subsample_data(face_mask, num_samples)
     face_mask = np.reshape(face_mask, (face_mask.shape[0], -1)).astype('float32')
+    y = subsample_data(y, num_samples)
     y = y.astype('float32')
     return [eye_left, eye_right, face, face_mask, y]
 
@@ -64,7 +72,7 @@ def train(model, train_data, val_data, batch_size=128, learning_rate=1e-3, epoch
     y_val = val_data[4]
 
     model.compile(loss='mse',
-                  optimizer=tf.keras.optimizers.Adam(lr=learning_rate))
+                  optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate))
 
     # save the model with best performance on the validation set
     checkpoint_cb = tf.keras.callbacks.ModelCheckpoint('gaze_prediction_model.h5', save_best_only=True)
@@ -76,7 +84,8 @@ def train(model, train_data, val_data, batch_size=128, learning_rate=1e-3, epoch
                         epochs=epochs,
                         batch_size=batch_size,
                         validation_data=([eye_left_val, eye_right_val, face_val, face_mask_val], [y_val]),
-                        callbacks=[checkpoint_cb, early_stopping_cb])
+                        callbacks=[checkpoint_cb, early_stopping_cb],
+                        verbose=True)
 
     return history
 
@@ -240,24 +249,30 @@ def create_model(train_data):
 
 def main():
     # load data
+    print('Loading Data...')
     train_data, val_data = get_train_val_data()
+
+    # normalized images
+    print('Preparing Data...')
+    # number of samples, added subsampling to try running or debug
+    num_samples = 20
+    train_data = prepare_data(train_data, num_samples=num_samples)
+    val_data = prepare_data(val_data, num_samples=num_samples)
+
+    print('Data Prepared')
+
     gaze_prediction_model = create_model(train_data)
 
     # plot the model to confirm structure
     print(gaze_prediction_model.summary())
-    tf.keras.utils.plot_model(gaze_prediction_model, 'Gaze-Prediction_Model.png', show_shapes=True,
-                              show_layer_names=True)
-
-    # normalized images
-    train_data = prepare_data(train_data)
-    val_data = prepare_data(val_data)
+    # tf.keras.utils.plot_model(gaze_prediction_model, 'Gaze-Prediction_Model.png', show_shapes=True,
+    #                         show_layer_names=True)
 
     # compile & train the model
-    history = train(gaze_prediction_model, train_data, val_data, batch_size=128, learning_rate=1e-5, epochs=1000)
+    history = train(gaze_prediction_model, train_data, val_data, batch_size=5, learning_rate=1e-3, epochs=10)
 
     # plot history
     plot_training_metrics(history)
-
 
 
 if __name__ == '__main__':
