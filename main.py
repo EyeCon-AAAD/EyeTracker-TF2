@@ -34,6 +34,14 @@ def normalize(data):
     return np.reshape(normalised_data, shape)
 
 
+def normalize_tf(data):
+    shape = data.shape
+    normalised_data = tf.reshape(data, (shape[0], -1))
+    normalised_data = tf.as_dtype(normalised_data, 'float32') / 255.
+    normalised_data = tf.subtract(normalised_data, tf.reduce_mean(normalised_data, axis=0))
+    return normalised_data
+
+
 def subsample_data(data, num_samples):
     if num_samples is None:
         return data
@@ -86,18 +94,12 @@ def train(model, train_data, val_data, batch_size=128, learning_rate=1e-3, epoch
     gcp_bucket = "eyecon_bucket_1"
     model_path = "gaze_prediction_model"
 
-    if tfc.remote():
-        tfc.run(
-            requirements_txt="requirements.txt",
-            distribution_strategy="auto",
-            chief_config=tfc.MachineConfig(
-                cpu_cores=8,
-                memory=30,
-                accelerator_type=tfc.AcceleratorType.NVIDIA_TESLA_T4,
-                accelerator_count=2
-            ),
-            docker_image_bucket_name=gcp_bucket
-        )
+    # if tfc.remote():
+        # print('TFC connected...')
+
+    # else:
+    #     print('No TFC connection')
+    #     return None
 
     checkpoint_path = os.path.join("gs://", gcp_bucket, model_path, "save_at_{epoch}")
 
@@ -120,13 +122,13 @@ def train(model, train_data, val_data, batch_size=128, learning_rate=1e-3, epoch
     ]
 
     if tfc.remote():
-        epochs = 10
+        epochs = 1000
         callbacks = callbacks
-        batch_size = 5
+        batch_size = 128
     else:
         epochs = 5
         callbacks = None
-        batch_size = 32
+        batch_size = 16
 
     history = model.fit([eye_left_train, eye_right_train, face_train, face_mask_train], [y_train],
                         epochs=epochs,
@@ -307,11 +309,25 @@ def main():
     # normalized images
     print('Preparing Data...')
     # number of samples, added subsampling to try running or debug. None for all samples
-    num_samples = 20
+    num_samples = None
     train_data = prepare_data(train_data, num_samples=num_samples)
     val_data = prepare_data(val_data, num_samples=num_samples)
 
     print('Data Prepared')
+
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "E:\EyeCon\key.json"
+    gcp_bucket = "eyecon_bucket_1"
+    tfc.run(
+        requirements_txt="requirements.txt",
+        distribution_strategy="auto",
+        chief_config=tfc.MachineConfig(
+            cpu_cores=8,
+            memory=30,
+            accelerator_type=tfc.AcceleratorType.NVIDIA_TESLA_T4,
+            accelerator_count=1
+        ),
+        docker_image_bucket_name=gcp_bucket
+    )
 
     gaze_prediction_model = create_model(train_data)
 
@@ -321,10 +337,10 @@ def main():
     #                         show_layer_names=True)
 
     # compile & train the model
-    history = train(gaze_prediction_model, train_data, val_data, batch_size=5, learning_rate=1e-3, epochs=10)
+    history = train(gaze_prediction_model, train_data, val_data, batch_size=5, learning_rate=1e-3, epochs=100)
 
     # plot history
-    plot_training_metrics(history)
+    # plot_training_metrics(history)
 
 
 if __name__ == '__main__':
