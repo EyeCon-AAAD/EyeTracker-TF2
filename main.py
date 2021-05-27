@@ -94,7 +94,7 @@ def train(model, train_data, val_data, batch_size=128, learning_rate=1e-3, epoch
 
     y_train = train_data[4]
     y_val = val_data[4]
-
+    
     model.compile(loss='mse',
                   optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate))
 
@@ -270,7 +270,7 @@ def create_model(train_data):
     fc = tf.keras.layers.Dense(units=128, activation='relu', name='FC-1')(fc)
 
     # ------------------------------------------ FC-2 -------------------------------------------------------
-    output = tf.keras.layers.Dense(units=2, activation='relu', name='FC-2')(fc)
+    output = tf.keras.layers.Dense(units=2, activation='linear', name='FC-2')(fc)
 
     model = tf.keras.Model(inputs=[input_eye_left, input_eye_right, input_face, input_face_mask],
                            outputs=[output])
@@ -283,7 +283,7 @@ def main():
     # load data
     print('Loading Data...')
     train_data, val_data = get_train_val_data()
-
+    #
     # normalized images
     print('Preparing Data...')
     # number of samples, added subsampling to try running or debug. None for all samples
@@ -297,8 +297,8 @@ def main():
 
     # plot the model to confirm structure
     print(gaze_prediction_model.summary())
-    # tf.keras.utils.plot_model(gaze_prediction_model, 'Gaze-Prediction_Model.png', show_shapes=True,
-     #                        show_layer_names=True)
+    # tf.keras.utils.plot_model(gaze_prediction_model, 'Gaze-Prediction_Model_2.png', show_shapes=True,
+    #                           show_layer_names=True)
 
     # compile & train the model
     history = train(gaze_prediction_model, train_data, val_data, batch_size=128, learning_rate=1e-3, epochs=1000)
