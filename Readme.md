@@ -19,6 +19,6 @@ Deviation. The network was tested on the aforementioned dataset.
 | 64x64         | 0.89, 0.99    | 1.09, 1.22    | 2.2281
 
 ## Acknowledgments
-This work is wouldn't be accomplished without the contribution of [hugochan](https://github.com/hugochan/Eye-Tracker) 
+This work wouldn't be accomplished without the contribution of [hugochan](https://github.com/hugochan/Eye-Tracker) 
 and [gdubrg](https://github.com/gdubrg/Eye-Tracking-for-Everyone)
 
